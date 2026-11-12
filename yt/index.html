@@ -13,6 +13,7 @@
 <body>
 <!-- YouTube's player, full-window, for a lens's web view on Spectacles. YouTube's embed refuses to play when opened
      on its own (Error 153: it needs to know which page it's in), so the lens opens this page: /yt/?v=VIDEO_ID
+     (add &acct=1 to play as whoever's signed in to YouTube in that web view)
 
      The video can't start itself with its sound on in a web view: it has to be touched. The lens does that, and this
      page tells it when — through the only thing a lens can read from a web view, whether it can go forward:
@@ -21,9 +22,12 @@
        can't again        the video has started (buffering or playing): stop touching, or it would pause
      Without a lens watching, none of this changes anything to see. -->
 <script>
-  const m = (new URLSearchParams(location.search).get("v") || "").match(/^[A-Za-z0-9_-]{11}$/)
+  const q = new URLSearchParams(location.search)
+  const m = (q.get("v") || "").match(/^[A-Za-z0-9_-]{11}$/)
   if (m) {
-    const YT = "https://www.youtube-nocookie.com"
+    // (&acct=1: YouTube's regular player, which knows who's signed in to YouTube in this browser — so a Premium
+    // account plays without adverts. Without it: the "no cookie" player, which never knows.)
+    const YT = q.get("acct") === "1" ? "https://www.youtube.com" : "https://www.youtube-nocookie.com"
     const f = document.createElement("iframe")
     f.src = YT + "/embed/" + m[0] + "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0&enablejsapi=1&origin=" +
       encodeURIComponent(location.origin)
