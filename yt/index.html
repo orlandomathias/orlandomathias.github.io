@@ -13,24 +13,38 @@
 <body>
 <!-- YouTube's player, full-window, for a lens's web view on Spectacles. YouTube's embed refuses to play when opened
      on its own (Error 153: it needs to know which page it's in), so the lens opens this page: /yt/?v=VIDEO_ID
-     (add &acct=1 to play as whoever's signed in to YouTube in that web view)
+     (add &acct=1 to play as whoever's signed in to YouTube in that web view — and &top=1 to go on from here to
+     YouTube's player itself, first-hand: embedded in this page it may not be let see who's signed in. It only opens
+     when it's come to from a page, never on its own, which is why the lens still comes here first.)
 
      The video can't start itself with its sound on in a web view: it has to be touched. The lens does that, and this
      page tells it when — through the only thing a lens can read from a web view, whether it can go forward:
        can't go forward   the page has just loaded: nothing known yet
        can go forward     the player's there (it has said what it's doing): touch its middle to start it
        can't again        the video has started (buffering or playing): stop touching, or it would pause
+     With &top=1: can go forward (this page is here, about to leave) → can't again (YouTube's player page has begun
+     to load: touch its middle a moment later, once).
      Without a lens watching, none of this changes anything to see. -->
 <script>
   const q = new URLSearchParams(location.search)
   const m = (q.get("v") || "").match(/^[A-Za-z0-9_-]{11}$/)
-  if (m) {
-    // (&acct=1: YouTube's regular player, which knows who's signed in to YouTube in this browser — so a Premium
-    // account plays without adverts. Without it: the "no cookie" player, which never knows.)
-    const YT = q.get("acct") === "1" ? "https://www.youtube.com" : "https://www.youtube-nocookie.com"
+  // (&acct=1: YouTube's regular player, which knows who's signed in to YouTube in this browser — so a Premium
+  // account plays without adverts. Without it: the "no cookie" player, which never knows.)
+  const YT = q.get("acct") === "1" ? "https://www.youtube.com" : "https://www.youtube-nocookie.com"
+  // (&mute=1: without its sound — for trying this page in a browser)
+  const PLAYER = m ? YT + "/embed/" + m[0] + "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0" + (q.get("mute") === "1" ? "&mute=1" : "") : ""
+  if (m && q.get("top") === "1") {
+    // first-hand: say this page is here — an entry ahead in the history, stepped back from — then go on to the player
+    const s = (window.ytLens = {top: true, flag: true})
+    history.pushState(null, "", location.href)
+    history.back()
+    setTimeout(() => {
+      s.flag = false
+      location.href = PLAYER
+    }, 400)
+  } else if (m) {
     const f = document.createElement("iframe")
-    f.src = YT + "/embed/" + m[0] + "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0&enablejsapi=1&origin=" +
-      encodeURIComponent(location.origin)
+    f.src = PLAYER + "&enablejsapi=1&origin=" + encodeURIComponent(location.origin)
     f.allow = "autoplay; encrypted-media; picture-in-picture"
     f.referrerPolicy = "strict-origin-when-cross-origin"
     document.body.appendChild(f)
