@@ -12,15 +12,74 @@
 </head>
 <body>
 <!-- YouTube's player, full-window, for a lens's web view on Spectacles. YouTube's embed refuses to play when opened
-     on its own (Error 153: it needs to know which page it's in), so the lens opens this page: /yt/?v=VIDEO_ID -->
+     on its own (Error 153: it needs to know which page it's in), so the lens opens this page: /yt/?v=VIDEO_ID
+
+     The video can't start itself with its sound on in a web view: it has to be touched. The lens does that, and this
+     page tells it when — through the only thing a lens can read from a web view, whether it can go forward:
+       can't go forward   the page has just loaded: nothing known yet
+       can go forward     the player's there (it has said what it's doing): touch its middle to start it
+       can't again        the video has started (buffering or playing): stop touching, or it would pause
+     Without a lens watching, none of this changes anything to see. -->
 <script>
   const m = (new URLSearchParams(location.search).get("v") || "").match(/^[A-Za-z0-9_-]{11}$/)
   if (m) {
+    const YT = "https://www.youtube-nocookie.com"
     const f = document.createElement("iframe")
-    f.src = "https://www.youtube-nocookie.com/embed/" + m[0] + "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0"
+    f.src = YT + "/embed/" + m[0] + "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0&enablejsapi=1&origin=" +
+      encodeURIComponent(location.origin)
     f.allow = "autoplay; encrypted-media; picture-in-picture"
     f.referrerPolicy = "strict-origin-when-cross-origin"
     document.body.appendChild(f)
+
+    const HOLD_MS = 500 // "the player's there" is held at least this long, so it's seen before "started"
+    const s = (window.ytLens = {heard: false, state: null, there: 0, started: false, flag: false})
+    const say = (o) => {
+      try {
+        f.contentWindow.postMessage(JSON.stringify(Object.assign({id: 1, channel: "widget"}, o)), YT)
+      } catch (e) {}
+    }
+    // (the flag: an entry ahead of this one in the web view's history — put there, and stepped back from)
+    const flagUp = () => {
+      if (s.flag) return
+      s.flag = true
+      history.pushState(null, "", location.href)
+      history.back()
+    }
+    const flagDown = () => {
+      if (!s.flag) return
+      s.flag = false
+      history.forward()
+    }
+    // asking the player to say what it's doing, till it answers
+    const ask = setInterval(() => (s.heard ? clearInterval(ask) : say({event: "listening"})), 250)
+    addEventListener("message", (e) => {
+      if (e.source !== f.contentWindow || e.origin !== YT) return
+      let d = e.data
+      try {
+        if (typeof d === "string") d = JSON.parse(d)
+      } catch (x) {
+        return
+      }
+      if (!d || typeof d !== "object") return
+      if (!s.heard) {
+        s.heard = true
+        say({event: "command", func: "addEventListener", args: ["onStateChange"]})
+      }
+      let state = null
+      if (d.event === "onStateChange" && typeof d.info === "number") state = d.info
+      else if (d.info && typeof d.info === "object" && typeof d.info.playerState === "number") state = d.info.playerState
+      if (state === null) return
+      s.state = state
+      if (!s.there) {
+        s.there = Date.now()
+        flagUp()
+      }
+      // (1 playing, 3 buffering: it's started)
+      if (!s.started && (state === 1 || state === 3)) {
+        s.started = true
+        setTimeout(flagDown, Math.max(0, s.there + HOLD_MS - Date.now()))
+      }
+    })
   }
 </script>
 </body>
